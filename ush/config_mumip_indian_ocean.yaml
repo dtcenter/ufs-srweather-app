@@ -24,10 +24,15 @@ task_get_extrn_ics:
   EXTRN_MDL_NAME_ICS: FV3GFS
   FV3GFS_FILE_FMT_ICS: netcdf
   USE_USER_STAGED_EXTRN_FILES: true
-  EXTRN_MDL_SOURCE_BASEDIR_ICS: /scratch2/BMC/fv3lam/MUMIP/icbc_data/GFSreplay/FV3GFS/netcdf/2016081012
+  EXTRN_MDL_SOURCE_BASEDIR_ICS: /scratch2/BMC/fv3lam/MUMIP/icbc_data/GFSreplay/FV3GFS/netcdf
+  EXTRN_MDL_FILES_ICS:
+    - '{yyyy}{mm}{dd}{hh}_gfs.t12z.atmanl.nc'
+    - '{yyyy}{mm}{dd}{hh}_gfs.t12z.sfcanl.nc'
 task_get_extrn_lbcs:
   USE_USER_STAGED_EXTRN_FILES: true
-  EXTRN_MDL_SOURCE_BASEDIR_LBCS: /scratch2/BMC/fv3lam/MUMIP/icbc_data/GFSreplay/FV3GFS/netcdf/2016081012
+  EXTRN_MDL_SOURCE_BASEDIR_LBCS: /scratch2/BMC/fv3lam/MUMIP/icbc_data/GFSreplay/FV3GFS/netcdf
+  EXTRN_MDL_FILES_LBCS:
+    - '{yyyy}{mm}{dd}{hh}_gfs.t12z.atmf{fcst_hr:03d}.nc'
   EXTRN_MDL_NAME_LBCS: FV3GFS
   LBC_SPEC_INTVL_HRS: 6
   FV3GFS_FILE_FMT_LBCS: netcdf
