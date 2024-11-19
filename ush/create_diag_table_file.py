@@ -1,33 +1,31 @@
 #!/usr/bin/env python3
 
 """
-Function to create a diag_table file for the FV3 model using a
-template.
+Creates a ``diag_table`` file for the FV3 model using a template
 """
 import argparse
 import os
 import sys
-import tempfile
-from subprocess import STDOUT, CalledProcessError, check_output
 from textwrap import dedent
+from uwtools.api.template import render
 
 from python_utils import (
     cfg_to_yaml_str,
     flatten_dict,
     import_vars,
-    load_shell_config,
+    load_yaml_config,
     print_info_msg,
     print_input_args,
 )
 
 
 def create_diag_table_file(run_dir):
-    """Creates a diagnostic table file for each cycle to be run
+    """Creates an FV3 diagnostic table (``diag_table``) file for each cycle to be run
 
     Args:
-        run_dir: run directory
+        run_dir (str): Run directory
     Returns:
-        Boolean
+        True
     """
 
     print_input_args(locals())
@@ -60,7 +58,10 @@ def create_diag_table_file(run_dir):
         verbose=VERBOSE,
     )
 
-    settings = {"starttime": CDATE, "cres": CRES}
+    settings = {"starttime": CDATE, "cres": CRES, "additional_entries": ""}
+    if UFS_FIRE:
+        settings["additional_entries"] = \
+                '"gfs_phys","fsmoke","fsmoke","fv3_history","all",.false.,"none",2'
     settings_str = cfg_to_yaml_str(settings)
 
     print_info_msg(
@@ -74,37 +75,16 @@ def create_diag_table_file(run_dir):
         verbose=VERBOSE,
     )
 
-    with tempfile.NamedTemporaryFile(dir="./",
-                                     mode="w+t",
-                                     prefix="aqm_rc_settings",
-                                     suffix=".yaml") as tmpfile:
-        tmpfile.write(settings_str)
-        tmpfile.seek(0)
-        cmd = " ".join(["uw template render",
-            "-i", DIAG_TABLE_TMPL_FP,
-            "-o", diag_table_fp,
-            "-v",
-            "--values-file", tmpfile.name,
-            ]
+    render(
+        input_file = DIAG_TABLE_TMPL_FP,
+        output_file = diag_table_fp,
+        values_src = settings,
         )
-        indent = "  "
-        output = ""
-        try:
-            output = check_output(cmd, encoding="utf=8", shell=True,
-                    stderr=STDOUT, text=True)
-        except CalledProcessError as e:
-            output = e.output
-            print(f"Failed with status: {e.returncode}")
-            sys.exit(1)
-        finally:
-            print("Output:")
-            for line in output.split("\n"):
-                print(f"{indent * 2}{line}")
     return True
 
 
-def parse_args(argv):
-    """Parse command line arguments"""
+def _parse_args(argv):
+    """Parses command line arguments"""
     parser = argparse.ArgumentParser(description="Creates diagnostic table file.")
 
     parser.add_argument(
@@ -123,8 +103,8 @@ def parse_args(argv):
 
 
 if __name__ == "__main__":
-    args = parse_args(sys.argv[1:])
-    cfg = load_shell_config(args.path_to_defns)
+    args = _parse_args(sys.argv[1:])
+    cfg = load_yaml_config(args.path_to_defns)
     cfg = flatten_dict(cfg)
     import_vars(dictionary=cfg)
     create_diag_table_file(args.run_dir)

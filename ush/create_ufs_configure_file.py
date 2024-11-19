@@ -1,43 +1,76 @@
 #!/usr/bin/env python3
 
 """
-Function to create a UFS configuration file for the FV3 forecast
-model(s) from a template.
+Creates a UFS configuration file for the FV3 forecast model(s) from a template.
 """
 
 import argparse
 import os
 import sys
-import tempfile
-from subprocess import STDOUT, CalledProcessError, check_output
 from textwrap import dedent
+from uwtools.api.template import render
 
 from python_utils import (
-    cfg_to_yaml_str,
     flatten_dict,
-    import_vars,
-    load_shell_config,
+    load_yaml_config,
     print_info_msg,
-    print_input_args,
 )
 
-def create_ufs_configure_file(run_dir):
-    """ Creates a ufs configuration file in the specified
-    run directory
+def create_ufs_configure_file(run_dir,cfg):
+    """ Creates a UFS configuration file in the specified run directory
 
     Args:
         run_dir: run directory
+        cfg: dictionary of config settings
     Returns:
-        Boolean
+        True
     """
-
-    print_input_args(locals())
-
-    #import all environment variables
-    import_vars()
 
     # pylint: disable=undefined-variable
 
+    # Set necessary variables for each coupled configuration
+
+    atm_end = str(int(cfg["PE_MEMBER01"]) - int(cfg["FIRE_NUM_TASKS"]) -1)
+    aqm_end = str(int(cfg["LAYOUT_X"]) * int(cfg["LAYOUT_Y"]) - 1)
+    fire_start = str(int(cfg["PE_MEMBER01"]) - int(cfg["FIRE_NUM_TASKS"]))
+    fire_end = str(int(cfg["PE_MEMBER01"]) - 1)
+
+    atm_petlist_bounds = f'0 {atm_end}'
+    if cfg["CPL_AQM"]:
+        earth_component_list = 'ATM AQM'
+        aqm_petlist_bounds = f'0 {aqm_end}'
+        atm_omp_num_threads_line = ''
+        atm_diag_line = ''
+        runseq = [ f"  @{cfg['DT_ATMOS']}\n",
+                   "    ATM phase1\n",
+                   "    ATM -> AQM\n",
+                   "    AQM\n",
+                   "    AQM -> ATM\n",
+                   "    ATM phase2\n",
+                   "  @" ]
+    elif cfg["UFS_FIRE"]:
+        earth_component_list = 'ATM FIRE'
+        atm_omp_num_threads_line = \
+            f"\nATM_omp_num_threads:            {cfg['OMP_NUM_THREADS_RUN_FCST']}"
+        atm_diag_line = ''
+        fire_petlist_bounds = f'{fire_start} {fire_end}'
+        runseq = [ f"  @{cfg['DT_ATMOS']}\n",
+                   "    ATM -> FIRE\n",
+                   "    FIRE -> ATM :remapmethod=conserve\n",
+                   "    ATM\n",
+                   "    FIRE\n",
+                   "  @" ]
+    else:
+        earth_component_list = 'ATM'
+        atm_omp_num_threads_line = \
+            f"\nATM_omp_num_threads:            {cfg['OMP_NUM_THREADS_RUN_FCST']}"
+        atm_diag_line = '  Diagnostic = 0'
+        runseq = [ "  ATM" ]
+
+    if cfg["PRINT_ESMF"]:
+        logkindflag = 'ESMF_LOGKIND_MULTI'
+    else:
+        logkindflag = 'ESMF_LOGKIND_MULTI_ON_ERROR'
     #
     #-----------------------------------------------------------------------
     #
@@ -46,13 +79,13 @@ def create_ufs_configure_file(run_dir):
     #-----------------------------------------------------------------------
     #
     print_info_msg(f'''
-        Creating a ufs.configure file (\"{UFS_CONFIG_FN}\") in the specified 
+        Creating a ufs.configure file (\"{cfg["UFS_CONFIG_FN"]}\") in the specified
         run directory (run_dir):
-          run_dir = \"{run_dir}\"''', verbose=VERBOSE)
+          {run_dir=}''', verbose=cfg["VERBOSE"])
     #
     # Set output file path
     #
-    ufs_config_fp = os.path.join(run_dir, UFS_CONFIG_FN)
+    ufs_config_fp = os.path.join(run_dir, cfg["UFS_CONFIG_FN"])
     #
     #-----------------------------------------------------------------------
     #
@@ -63,62 +96,49 @@ def create_ufs_configure_file(run_dir):
     #-----------------------------------------------------------------------
     #
     settings = {
-      "dt_atmos": DT_ATMOS,
-      "print_esmf": PRINT_ESMF,
-      "cpl_aqm": CPL_AQM
+      "ufs_fire": cfg["UFS_FIRE"],
+      "logKindFlag": logkindflag,
+      "EARTH_cl": earth_component_list,
+      "ATM_pb": atm_petlist_bounds,
+      "ATM_omp_num_threads_line": atm_omp_num_threads_line,
+      "ATM_diag_line": atm_diag_line,
+      "runseq": runseq,
+      "AQM_pb": "",
+      "FIRE_pb": "",
+      "dt_atmos": cfg["DT_ATMOS"],
+      "print_esmf": cfg["PRINT_ESMF"],
+      "cpl_aqm": cfg["CPL_AQM"]
     }
-    settings_str = cfg_to_yaml_str(settings)
+    if cfg["CPL_AQM"]:
+        settings["AQM_pb"] = aqm_petlist_bounds
+    if cfg["UFS_FIRE"]:
+        settings["FIRE_pb"] = fire_petlist_bounds
 
     print_info_msg(
         dedent(
             f"""
-            The variable \"settings\" specifying values to be used in the \"{UFS_CONFIG_FN}\"
+            The variable \"settings\" specifying values to be used in the \"{cfg["UFS_CONFIG_FN"]}\"
             file has been set as follows:\n
-            settings =\n\n"""
-        )
-        + settings_str,
-        verbose=VERBOSE,
+            {settings=}\n\n"""
+        ), verbose=cfg["VERBOSE"]
     )
     #
     #-----------------------------------------------------------------------
     #
-    # Call a python script to generate the experiment's actual UFS_CONFIG_FN
-    # file from the template file.
+    # Call the uwtools "render" function to fill in jinja expressions contained in the UFS Configure
+    # file template with the values from the settings variable to create ufs.configure file for this
+    # experiment
     #
     #-----------------------------------------------------------------------
     #
-    # Store the settings in a temporary file
-    with tempfile.NamedTemporaryFile(dir="./",
-                                     mode="w+t",
-                                     prefix="ufs_config_settings",
-                                     suffix=".yaml") as tmpfile:
-        tmpfile.write(settings_str)
-        tmpfile.seek(0)
-
-        cmd = " ".join(["uw template render",
-            "-i", UFS_CONFIG_TMPL_FP,
-            "-o", ufs_config_fp,
-            "-v",
-            "--values-file", tmpfile.name,
-            ]
+    render(
+        input_file = cfg["UFS_CONFIG_TMPL_FP"],
+        output_file = ufs_config_fp,
+        values_src = settings,
         )
-
-        indent = "  "
-        output = ""
-        try:
-            output = check_output(cmd, encoding="utf=8", shell=True,
-                    stderr=STDOUT, text=True)
-        except CalledProcessError as e:
-            output = e.output
-            print(f"Failed with status: {e.returncode}")
-            sys.exit(1)
-        finally:
-            print("Output:")
-            for line in output.split("\n"):
-                print(f"{indent * 2}{line}")
     return True
 
-def parse_args(argv):
+def _parse_args(argv):
     """ Parse command line arguments"""
     parser = argparse.ArgumentParser(
         description='Creates UFS configuration file.'
@@ -137,10 +157,7 @@ def parse_args(argv):
     return parser.parse_args(argv)
 
 if __name__ == "__main__":
-    args = parse_args(sys.argv[1:])
-    cfg = load_shell_config(args.path_to_defns)
-    cfg = flatten_dict(cfg)
-    import_vars(dictionary=cfg)
-    create_ufs_configure_file(
-        run_dir=args.run_dir,
-    )
+    args = _parse_args(sys.argv[1:])
+    conf = load_yaml_config(args.path_to_defns)
+    confg = flatten_dict(conf)
+    create_ufs_configure_file(run_dir=args.run_dir,cfg=confg)

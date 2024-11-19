@@ -9,6 +9,7 @@ Steps to build and use the Sphinx documentation tool:
     pip install sphinx
     pip install sphinxcontrib-bibtex
     pip install sphinx-rtd-theme
+    pip install sphinxcontrib.autoyaml
 
     One approach that has worked to resolve "Module Not Found" errors for users with MacPorts package manager: 
     $ sudo port install py-six  # may not be necessary
@@ -20,10 +21,11 @@ Steps to build and use the Sphinx documentation tool:
 
 To build html:
 
-$ cd ufs-srweather-app/docs/UsersGuide
-$ make clean && sphinx-build -b html source build
+$ cd ufs-srweather-app/doc
+$ make clean && sphinx-build -b html . build
 
 The "make html" command can often be used in place of the previous command.
+"make doc" will both build the html and run the linkchecker. 
 
 Sphinx uses Latex to export the documentation as a PDF file.  To build pdf:
 

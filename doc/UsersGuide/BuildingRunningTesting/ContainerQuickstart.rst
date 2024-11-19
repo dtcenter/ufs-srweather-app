@@ -81,7 +81,7 @@ On most Level 1 systems, a container named ``ubuntu20.04-intel-ue-1.4.1-srw-dev.
    * - Hera
      - /scratch1/NCEPDEV/nems/role.epic/containers
    * - Jet
-     - /mnt/lfs4/HFIP/hfv3gfs/role.epic/containers
+     - /mnt/lfs5/HFIP/hfv3gfs/role.epic/containers
    * - NOAA Cloud
      - /contrib/EPIC/containers
    * - Orion/Hercules [#fn]_
@@ -188,8 +188,8 @@ The SRW App requires input files to run. These include static datasets, initial 
 
 .. code-block:: console
 
-   wget https://noaa-ufs-srw-pds.s3.amazonaws.com/current_srw_release_data/fix_data.tgz
-   wget https://noaa-ufs-srw-pds.s3.amazonaws.com/current_srw_release_data/gst_data.tgz
+   wget https://noaa-ufs-srw-pds.s3.amazonaws.com/experiment-user-cases/release-public-v2.2.0/out-of-the-box/fix_data.tgz
+   wget https://noaa-ufs-srw-pds.s3.amazonaws.com/experiment-user-cases/release-public-v2.2.0/out-of-the-box/gst_data.tgz
    tar -xzf fix_data.tgz
    tar -xzf gst_data.tgz
 
